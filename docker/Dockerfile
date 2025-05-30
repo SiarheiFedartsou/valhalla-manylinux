@@ -66,6 +66,13 @@ RUN export LIBXCRYPT_VERSION=4.4.38 && \
     export LIBXCRYPT_DOWNLOAD_URL=https://github.com/besser82/libxcrypt/releases/download && \
     manylinux-entrypoint /build_scripts/install-libxcrypt.sh
 
+# Install CMake to the final base image to build Valhalla
+COPY build_scripts/install-cmake.sh /build_scripts/
+RUN export CMAKE_ROOT=cmake-3.31.7 && \
+    export CMAKE_HASH=a6d2eb1ebeb99130dfe63ef5a340c3fdb11431cce3d7ca148524c125924cea68 && \
+    export CMAKE_DOWNLOAD_URL=https://github.com/Kitware/CMake/releases/download/v3.31.7 && \
+    manylinux-entrypoint /build_scripts/install-cmake.sh
+
 FROM runtime_base AS build_base
 COPY build_scripts/install-build-packages.sh /build_scripts/
 RUN manylinux-entrypoint /build_scripts/install-build-packages.sh
@@ -105,7 +112,6 @@ RUN export MPDECIMAL_ROOT=mpdecimal-4.0.0 && \
     export MPDECIMAL_HASH=942445c3245b22730fd41a67a7c5c231d11cb1b9936b9c0f76334fb7d0b4468c && \
     export MPDECIMAL_DOWNLOAD_URL=https://www.bytereef.org/software/mpdecimal/releases && \
     manylinux-entrypoint /build_scripts/build-mpdecimal.sh
-
 
 FROM --platform=${BUILDPLATFORM} ghcr.io/sigstore/cosign/cosign:v2.4.2 AS cosign-bin
 
@@ -149,11 +155,45 @@ RUN manylinux-entrypoint /build_scripts/build-cpython.sh hugo@python.org https:/
 FROM build_cpython AS build_cpython314_nogil
 RUN manylinux-entrypoint /build_scripts/build-cpython.sh hugo@python.org https://github.com/login/oauth 3.14.0b1 nogil
 
+# Build and install more packages from source
+# Have to build from git source, bcs of submodules..
+FROM build_git AS build_prime_server
+COPY build_scripts/build-prime_server.sh /build_scripts/
+RUN export PRIME_ROOT=prime_server-0.7.0 && \
+    export PRIME_GIT_URL=https://github.com/kevinkreiser/prime_server && \
+    manylinux-entrypoint /build_scripts/build-prime_server.sh
+
+# AlmaLinux 8 has protobuf 3.5.0; IIRC that was too old for Valhalla
+FROM build_base AS build_protobuf
+COPY build_scripts/build-protobuf.sh /build_scripts/
+RUN export PROTOBUF_ROOT=protobuf-3.21.12 && \
+    export PROTOBUF_DOWNLOAD_URL=https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protobuf-cpp-3.21.12.tar.gz && \
+    manylinux-entrypoint /build_scripts/build-protobuf.sh
+
+# AlmaLinux 8 has boost 1.66 while we require min 1.71, only install headers
+FROM build_base AS build_boost
+COPY build_scripts/build-boost.sh /build_scripts/
+RUN export BOOST_ROOT=boost-1.88.0 && \
+    export BOOST_HASH=85138e4a185a7e7535e82b011179c5b5fb72185bea9f59fe8e2d76939b2f5c51 && \
+    export BOOST_DOWNLOAD_URL=https://github.com/boostorg/boost/releases/download/boost-1.88.0 && \
+    manylinux-entrypoint /build_scripts/build-boost.sh
+
+# AlmaLinux 8 has boost 1.66 while we require min 1.71, only install headers
+FROM build_base AS build_geos
+COPY build_scripts/build-geos.sh /build_scripts/
+RUN export GEOS_ROOT=geos-3.13.1 && \
+    export GEOS_DOWNLOAD_URL=https://github.com/libgeos/geos/releases/download/3.13.1 && \
+    manylinux-entrypoint /build_scripts/build-geos.sh
+
 FROM runtime_base
 COPY --from=build_tcl_tk /manylinux-rootfs /
 COPY --from=build_mpdecimal /manylinux-rootfs /
 COPY --from=build_sqlite3 /manylinux-rootfs /
 COPY --from=build_git /manylinux-rootfs /
+COPY --from=build_prime_server /manylinux-rootfs /
+COPY --from=build_protobuf /manylinux-rootfs /
+COPY --from=build_boost /manylinux-rootfs /
+COPY --from=build_geos /manylinux-rootfs /
 COPY build_scripts /opt/_internal/build_scripts/
 RUN --mount=type=bind,target=/build_cpython38,from=build_cpython38 \
     --mount=type=bind,target=/build_cpython39,from=build_cpython39 \
@@ -170,5 +210,6 @@ RUN --mount=type=bind,target=/build_cpython38,from=build_cpython38 \
       pp310-pypy310_pp73 pp311-pypy311_pp73
 
 ENV SSL_CERT_FILE=/opt/_internal/certs.pem
+ENV PKG_CONFIG_PATH=${PKG_CONFIG_PATH}:/usr/local/lib64/pkgconfig
 
 CMD ["/bin/bash"]

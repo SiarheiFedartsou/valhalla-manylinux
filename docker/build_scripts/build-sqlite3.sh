@@ -27,7 +27,13 @@ tar xfz "${SQLITE_AUTOCONF_ROOT}.tar.gz"
 pushd "${SQLITE_AUTOCONF_ROOT}"
 # add rpath
 sed -i "s|^Libs:|Libs: -Wl,--enable-new-dtags,-rpath=\${libdir} |g" sqlite3.pc.in
-DESTDIR=/manylinux-rootfs do_standard_install --prefix=${PREFIX}
+
+# MOD: enable more preprocessing options for SQLite which are needed for GDAL & spatialite
+# DESTDIR=/manylinux-rootfs do_standard_install --prefix=${PREFIX}
+./configure --prefix=${PREFIX} CPPFLAGS="${MANYLINUX_CPPFLAGS} -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_COLUMN_METADATA" CFLAGS="${MANYLINUX_CFLAGS}" "CXXFLAGS=${MANYLINUX_CXXFLAGS}" LDFLAGS="${MANYLINUX_LDFLAGS}" > /dev/null
+make > /dev/null
+DESTDIR=/manylinux-rootfs make install > /dev/null
+
 popd
 rm -rf "${SQLITE_AUTOCONF_ROOT}" "${SQLITE_AUTOCONF_ROOT}.tar.gz"
 
@@ -36,7 +42,7 @@ rm /manylinux-rootfs${PREFIX}/lib/libsqlite3.a
 rm -rf /manylinux-rootfs${PREFIX}/share
 
 # Strip what we can
-strip_ /manylinux-rootfs
+# strip_ /manylinux-rootfs
 
 # Install for build
 mkdir /manylinux-buildfs
