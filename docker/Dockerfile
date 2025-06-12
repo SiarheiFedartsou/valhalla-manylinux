@@ -156,12 +156,20 @@ FROM build_cpython AS build_cpython314_nogil
 RUN manylinux-entrypoint /build_scripts/build-cpython.sh hugo@python.org https://github.com/login/oauth 3.14.0b1 nogil
 
 # Build and install more packages from source
-# Have to build from git source, bcs of submodules..
+# Have to build prime_server from git source, bcs of submodules..
 FROM build_git AS build_prime_server
 COPY build_scripts/build-prime_server.sh /build_scripts/
 RUN export PRIME_ROOT=prime_server-0.7.0 && \
     export PRIME_GIT_URL=https://github.com/kevinkreiser/prime_server && \
     manylinux-entrypoint /build_scripts/build-prime_server.sh
+
+# patchelf in AlmaLinux has a bug which corrupts "valhalla_service"
+# installing 523f401 from 15.02.2025, which works nicely
+FROM build_git AS build_patchelf
+COPY build_scripts/build-patchelf.sh /build_scripts/
+RUN export PATCHELF_ROOT=patchelf-523f401 && \
+    export PATCHELF_GIT_URL=https://github.com/NixOS/patchelf && \
+    manylinux-entrypoint /build_scripts/build-patchelf.sh
 
 # AlmaLinux 8 has protobuf 3.5.0; IIRC that was too old for Valhalla
 FROM build_base AS build_protobuf
@@ -191,6 +199,7 @@ COPY --from=build_mpdecimal /manylinux-rootfs /
 COPY --from=build_sqlite3 /manylinux-rootfs /
 COPY --from=build_git /manylinux-rootfs /
 COPY --from=build_prime_server /manylinux-rootfs /
+COPY --from=build_patchelf /manylinux-rootfs /
 COPY --from=build_protobuf /manylinux-rootfs /
 COPY --from=build_boost /manylinux-rootfs /
 COPY --from=build_geos /manylinux-rootfs /
