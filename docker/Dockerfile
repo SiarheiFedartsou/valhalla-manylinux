@@ -95,6 +95,13 @@ COPY build_scripts/build-sqlite3.sh /build_scripts/
 RUN export SQLITE_AUTOCONF_ROOT=sqlite-autoconf-3490200 && \
     export SQLITE_AUTOCONF_HASH=5c6d8697e8a32a1512a9be5ad2b2e7a891241c334f56f8b0fb4fc6051e1652e8 && \
     export SQLITE_AUTOCONF_DOWNLOAD_URL=https://www.sqlite.org/2025 && \
+    # MOD: build all dependencies for libspatialite
+    export GEOS_ROOT=geos-3.13.1 && \
+    export GEOS_DOWNLOAD_URL=https://github.com/libgeos/geos/releases/download/3.13.1 && \
+    export RTTOPO_ROOT=librttopo-1.1.0 && \
+    export RTTOPO_DOWNLOAD_URL=https://github.com/CGX-GROUP/librttopo/archive/refs/tags && \
+    export SPATIALITE_ROOT=libspatialite-5.1.0 && \
+    export SPATIALITE_DOWNLOAD_URL=https://www.gaia-gis.it/gaia-sins/libspatialite-sources && \
     manylinux-entrypoint /build_scripts/build-sqlite3.sh
 
 FROM build_base AS build_tcl_tk
@@ -186,12 +193,38 @@ RUN export BOOST_ROOT=boost-1.88.0 && \
     export BOOST_DOWNLOAD_URL=https://github.com/boostorg/boost/releases/download/boost-1.88.0 && \
     manylinux-entrypoint /build_scripts/build-boost.sh
 
-# AlmaLinux 8 has boost 1.66 while we require min 1.71, only install headers
+# AlmaLinux 8 has geos 3.7.2 which is missing a .pc file
 FROM build_base AS build_geos
 COPY build_scripts/build-geos.sh /build_scripts/
 RUN export GEOS_ROOT=geos-3.13.1 && \
     export GEOS_DOWNLOAD_URL=https://github.com/libgeos/geos/releases/download/3.13.1 && \
     manylinux-entrypoint /build_scripts/build-geos.sh
+
+# AlmaLinux 8 has no librttopo published
+FROM build_base AS build_rttopo
+COPY --from=build_geos /manylinux-rootfs /
+COPY build_scripts/build-rttopo.sh /build_scripts/
+RUN export RTTOPO_ROOT=librttopo-1.1.0 && \
+    export RTTOPO_DOWNLOAD_URL=https://github.com/CGX-GROUP/librttopo/archive/refs/tags && \
+    manylinux-entrypoint /build_scripts/build-rttopo.sh
+
+# needed to build spatialite from source
+FROM build_base AS build_freexl
+COPY build_scripts/build-freexl.sh /build_scripts/
+RUN export FREEXL_ROOT=freexl-2.0.0 && \
+    export FREEXL_DOWNLOAD_URL=https://www.gaia-gis.it/gaia-sins && \
+    manylinux-entrypoint /build_scripts/build-freexl.sh
+
+# AlmaLinux 8 has no librttopo published, so we need to build libspatialite from source
+FROM build_base AS build_spatialite
+COPY --from=build_sqlite3 /manylinux-rootfs /
+COPY --from=build_geos /manylinux-rootfs /
+COPY --from=build_rttopo /manylinux-rootfs /
+COPY --from=build_freexl /manylinux-rootfs /
+COPY build_scripts/build-spatialite.sh /build_scripts/
+RUN export SPATIALITE_ROOT=libspatialite-5.1.0 && \
+    export SPATIALITE_DOWNLOAD_URL=https://www.gaia-gis.it/gaia-sins/libspatialite-sources && \
+    manylinux-entrypoint /build_scripts/build-spatialite.sh
 
 FROM runtime_base
 COPY --from=build_tcl_tk /manylinux-rootfs /
@@ -203,6 +236,9 @@ COPY --from=build_patchelf /manylinux-rootfs /
 COPY --from=build_protobuf /manylinux-rootfs /
 COPY --from=build_boost /manylinux-rootfs /
 COPY --from=build_geos /manylinux-rootfs /
+COPY --from=build_rttopo /manylinux-rootfs /
+COPY --from=build_freexl /manylinux-rootfs /
+COPY --from=build_spatialite /manylinux-rootfs /
 COPY build_scripts /opt/_internal/build_scripts/
 RUN --mount=type=bind,target=/build_cpython38,from=build_cpython38 \
     --mount=type=bind,target=/build_cpython39,from=build_cpython39 \

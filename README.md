@@ -12,7 +12,10 @@ Adaptations:
   - `build-protobuf.sh`: `dnf` would install 3.5.0, I guess that was troublesome, can't remember..
   - `build-boost.sh`: `dnf` would install 1.66, while we require min 1.71
   - `build-geos.sh`: `dnf` would install 3.7.2, which didn't install a `.pc` file
-  - `install-cmake.sh`: needed to build above packages
+  - `build-freexl.sh`: used to build libspatialite
+  - `build-rttopo.sh`: `dnf` doesn't have librttopo which is needed for `ST_MakeValid` function in `valhalla_build_admins`
+  - `build-spatialite.sh`: need to build from source for librttopo support, see above
+  - `install-cmake.sh`: needed to build some of the above packages
 
 ### Local builds
 

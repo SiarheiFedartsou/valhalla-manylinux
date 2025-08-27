@@ -31,7 +31,4 @@ rm -rf "$PROTOBUF_TAR_GZ" "$PROTOBUF_ROOT"
 # Strip what we can
 strip_ /manylinux-rootfs
 
-# Install
-cp -rlf /manylinux-rootfs/* /
-
 hash -r

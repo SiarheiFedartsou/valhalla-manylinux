@@ -28,7 +28,4 @@ rm -rf "${PRIME_ROOT}"
 # Strip what we can
 strip_ /manylinux-rootfs
 
-# Install
-cp -rlf /manylinux-rootfs/* /
-
 hash -r

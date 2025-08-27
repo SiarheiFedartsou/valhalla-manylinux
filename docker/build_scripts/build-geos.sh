@@ -18,14 +18,11 @@ check_var "${GEOS_DOWNLOAD_URL}"
 fetch_source "${GEOS_ROOT}.tar.bz2" "$GEOS_DOWNLOAD_URL"
 tar -xf "${GEOS_ROOT}.tar.bz2"
 pushd "${GEOS_ROOT}"
-cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON .
+cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_TESTING=OFF .
 make -C build -j$(nproc)
 DESTDIR=/manylinux-rootfs make -C build install
 popd
 
 rm -rf "${GEOS_ROOT}.tar.bz2" "$GEOS_ROOT"
-
-# Install
-cp -rlf /manylinux-rootfs/* /
 
 hash -r
