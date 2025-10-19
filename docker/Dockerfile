@@ -1,5 +1,4 @@
-# default to latest supported policy, x86_64
-ARG BASEIMAGE=amd64/almalinux:9
+ARG BASEIMAGE=almalinux:9
 ARG POLICY=manylinux_2_34
 ARG PLATFORM=x86_64
 ARG DEVTOOLSET_ROOTPATH=/opt/rh/gcc-toolset-14/root
