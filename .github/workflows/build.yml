@@ -68,13 +68,11 @@ jobs:
           path: .buildx-cache-manylinux_2_28_${{ matrix.platform }}/
           key: buildx-cache-manylinux_2_28_${{ matrix.platform }}-${{ hashFiles('docker/**') }}
 
-      - name: Login to GitHub Container Registry
-        if: github.event_name == 'push'
-        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
       - name: Push image
         if: github.event_name == 'push'
         run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
           docker tag quay.io/pypa/manylinux_2_28_${{ matrix.platform }}:${{ github.sha }} ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_${{ matrix.platform }}_${{ env.BRANCH }}
           docker push ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_${{ matrix.platform }}_${{ env.BRANCH }}
           docker image rm quay.io/pypa/manylinux_2_28_${{ matrix.platform }}:${{ github.sha }}
@@ -91,11 +89,10 @@ jobs:
           echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
           echo "REPO_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      - name: Login to GitHub Container Registry
-        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
       - name: Create and push manifest
         run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
           docker manifest create ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_${{ env.BRANCH }} \
             --amend ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_x86_64_${{ env.BRANCH }} \
             --amend ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_aarch64_${{ env.BRANCH }}
