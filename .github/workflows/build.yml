@@ -13,6 +13,9 @@ on:
       - "valhalla_python"
     paths-ignore:
       - '*.md'
+  pull_request:
+    branches:
+      - "valhalla_python"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -20,12 +23,19 @@ concurrency:
 
 jobs:
   build_manylinux:
-    name: manylinux_2_28_x86_64
-    runs-on: ubuntu-22.04
+    name: manylinux_2_28_${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - platform: x86_64
+            runner: ubuntu-22.04
+          - platform: aarch64
+            runner: ubuntu-22.04-arm
 
     env:
       POLICY: manylinux_2_28
-      PLATFORM: x86_64
+      PLATFORM: ${{ matrix.platform }}
       COMMIT_SHA: ${{ github.sha }}
 
     steps:
@@ -39,13 +49,14 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || fromJSON(github.event.inputs.useCache)
         uses: actions/cache/restore@v4
         with:
-          path: .buildx-cache-manylinux_2_28_x86_64/
-          key: buildx-cache-manylinux_2_28_x86_64-${{ hashFiles('docker/**') }}
-          restore-keys: buildx-cache-manylinux_2_28_x86_64-
+          path: .buildx-cache-manylinux_2_28_${{ matrix.platform }}/
+          key: buildx-cache-manylinux_2_28_${{ matrix.platform }}-${{ hashFiles('docker/**') }}
+          restore-keys: buildx-cache-manylinux_2_28_${{ matrix.platform }}-
 
       - name: Get branch name
         run: |
           echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
+          echo "REPO_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Build image
         run: ./build.sh
@@ -54,12 +65,35 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: .buildx-cache-manylinux_2_28_x86_64/
-          key: buildx-cache-manylinux_2_28_x86_64-${{ hashFiles('docker/**') }}
+          path: .buildx-cache-manylinux_2_28_${{ matrix.platform }}/
+          key: buildx-cache-manylinux_2_28_${{ matrix.platform }}-${{ hashFiles('docker/**') }}
 
       - name: Push image
+        if: github.event_name == 'push'
         run: |
-          docker tag quay.io/pypa/manylinux_2_28_x86_64:${{ github.sha }} ghcr.io/valhalla/manylinux:2_28_${{ env.BRANCH }}
-          docker image rm quay.io/pypa/manylinux_2_28_x86_64:${{ github.sha }}
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker push ghcr.io/valhalla/manylinux:2_28_${{ env.BRANCH }}
+
+          docker tag quay.io/pypa/manylinux_2_28_${{ matrix.platform }}:${{ github.sha }} ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_${{ matrix.platform }}_${{ env.BRANCH }}
+          docker push ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_${{ matrix.platform }}_${{ env.BRANCH }}
+          docker image rm quay.io/pypa/manylinux_2_28_${{ matrix.platform }}:${{ github.sha }}
+
+  create_manifest:
+    name: Create multi-arch manifest
+    runs-on: ubuntu-24.04
+    needs: build_manylinux
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Get branch name
+        run: |
+          echo "BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
+          echo "REPO_LOWERCASE=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Create and push manifest
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          docker manifest create ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_${{ env.BRANCH }} \
+            --amend ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_x86_64_${{ env.BRANCH }} \
+            --amend ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_aarch64_${{ env.BRANCH }}
+          docker manifest push ghcr.io/${{ env.REPO_LOWERCASE }}:2_28_${{ env.BRANCH }}

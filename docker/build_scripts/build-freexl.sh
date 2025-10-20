@@ -18,6 +18,11 @@ check_var "${FREEXL_DOWNLOAD_URL}"
 fetch_source "${FREEXL_ROOT}.tar.gz" "$FREEXL_DOWNLOAD_URL"
 tar -xzf "${FREEXL_ROOT}.tar.gz"
 pushd "${FREEXL_ROOT}"
+# Update config.guess and config.sub for aarch64 support
+if [ -f /usr/share/automake-*/config.guess ]; then
+	cp -f /usr/share/automake-*/config.guess .
+	cp -f /usr/share/automake-*/config.sub .
+fi
 ./configure
 make -j$(nproc)
 DESTDIR=/manylinux-rootfs make install
